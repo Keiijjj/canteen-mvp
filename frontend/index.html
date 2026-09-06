@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Canteen & Banking</title>
+  <link rel="stylesheet" href="./style.css" />
+  <!-- CDN for QR Generation -->
+  <script src="qrcode.min.js"></script>
+  <!-- CDN for Real-Time Camera QR Scanning -->
+  <script src="html5-qrcode.min.js"></script>
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <header class="navbar">
+    <div class="brand">
+      <h1>Elders Canteen</h1>
+    </div>
+    
+    <!-- User Switcher & Info -->
+    <div class="wallet-bar">
+      <div class="account-selector">
+        <label for="userSelect"><strong>Logged In:</strong></label>
+        <select id="userSelect"></select>
+      </div>
+
+      <div class="wallet-stat" id="walletStatBox">
+        Balance: <strong id="walletBalance">₱0.00</strong>
+      </div>
+      
+      <div class="wallet-stat plates-stat" id="borrowedStatBox">
+        Borrowed: <strong id="borrowedPlates">0</strong> Plates | <strong id="borrowedCutlery">0</strong> Utensils
+      </div>
+
+      <!-- Student Actions -->
+      <button class="action-btn green-btn" id="showDepositQrBtn">📱 My Deposit QR</button>
+      <button class="action-btn orange-btn" id="showReturnQrBtn">↩ Return Tableware QR</button>
+
+      <!-- Admin Actions -->
+      <button class="action-btn purple-btn" id="openScannerBtn" style="display:none;">📷 Scan Student QR</button>
+    </div>
+  </header>
+
+  <!-- Category Filter Bar -->
+  <section class="filter-bar">
+    <button class="filter-btn active" data-category="all">All</button>
+    <button class="filter-btn" data-category="rice">Rice (₱10)</button>
+    <button class="filter-btn" data-category="meat">Meat (₱35)</button>
+    <button class="filter-btn" data-category="vegetable">Vegetables (₱25)</button>
+    <button class="filter-btn" data-category="snack">Snacks</button>
+    <button class="filter-btn" data-category="drink">Drinks</button>
+  </section>
+
+  <!-- Student Active Orders Panel (Silent Status Tracking) -->
+  <section id="student-orders-panel" style="margin: 1.5rem auto; max-width: 1200px; padding: 0 1rem; display: none;">
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1rem;">
+      <h3 style="margin-top: 0;">🛎️ My Active Orders</h3>
+      <div id="student-orders-list">
+        <p style="color: #64748b;">No ongoing orders.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Grid -->
+  <main class="container">
+    <section class="menu-grid" id="menuGrid">
+      <p class="loading-msg">Loading dishes...</p>
+    </section>
+
+    <!-- Cart Sidebar -->
+    <aside class="cart-sidebar" id="cartSidebar">
+      <h2>Your Tray</h2>
+      
+      <div class="order-type-toggle">
+        <label><input type="radio" name="orderType" value="dine_in" checked /> Dine-In</label>
+        <label><input type="radio" name="orderType" value="takeout" /> Takeout</label>
+      </div>
+
+      <div id="cartItems" class="cart-items">
+        <p class="empty-msg">Your tray is empty.</p>
+      </div>
+
+      <div class="utensils-section" id="utensilSection">
+        <div class="utensil-title">Borrow Tableware (Refundable)</div>
+        <div class="utensil-row">
+          <span>Plate (+₱10)</span>
+          <div class="qty-controls">
+            <button class="qty-btn" onclick="adjustTableware('plate', -1)">-</button>
+            <span class="qty-val" id="plateCount">1</span>
+            <button class="qty-btn" onclick="adjustTableware('plate', 1)">+</button>
+          </div>
+        </div>
+        <div class="utensil-row">
+          <span>Spoon & Fork Set (+₱5)</span>
+          <div class="qty-controls">
+            <button class="qty-btn" onclick="adjustTableware('cutlery', -1)">-</button>
+            <span class="qty-val" id="cutleryCount">1</span>
+            <button class="qty-btn" onclick="adjustTableware('cutlery', 1)">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cart-summary">
+        <div class="summary-row">
+          <span>Food Subtotal:</span>
+          <span id="subtotalAmount">₱0.00</span>
+        </div>
+        <div class="summary-row deposit-row">
+          <span>Tableware Deposit:</span>
+          <span id="depositAmount">₱0.00</span>
+        </div>
+        <div class="summary-row total-row">
+          <span>Total Deduction:</span>
+          <span id="totalAmount">₱0.00</span>
+        </div>
+        <button class="checkout-btn" id="checkoutBtn" disabled>Pay with Canteen Wallet</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Modal 1: Student QR Display -->
+  <div class="modal-overlay" id="qrModal" style="display:none;">
+    <div class="modal-card">
+      <h3 id="qrModalTitle">Student QR Pass</h3>
+      <p id="qrModalDesc">Present this QR to the cashier counter.</p>
+      <div id="qrcodeBox" class="qrcode-container"></div>
+      <button class="close-btn" onclick="closeQrModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- Modal 2: Admin Camera Scanner -->
+  <div class="modal-overlay" id="scannerModal" style="display:none;">
+    <div class="modal-card scanner-card">
+      <h3>Staff Camera Scanner</h3>
+      <p>Align the student's QR code within the frame.</p>
+      <div id="reader" style="width: 100%; max-width: 320px; margin: 10px auto;"></div>
+      <button class="close-btn" onclick="closeScannerModal()">Stop Scanner</button>
+    </div>
+  </div>
+  
+  <!-- Kitchen & Super Admin Order Pipeline Panel -->
+  <section id="admin-queue-panel" class="admin-only" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem; display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem;">
+      <h3 style="margin: 0;">🍳 Kitchen Order Management</h3>
+      <button onclick="fetchOrderQueue()" style="padding: 6px 14px; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
+        🔄 Refresh Queue
+      </button>
+    </div>
+    <thead>
+        <tr style="background: #f1f5f9; text-align: left;">
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Order #</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Time</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Student</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Items</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Type</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Staff Note 📝</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Current Status</th>
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Action</th>
+        </tr>
+      </thead>
+
+    <!-- Stage Filter Tabs -->
+    <div style="display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap;">
+      <button class="queue-tab-btn active" onclick="setQueueTab('all', this)" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #2563eb; color: white; cursor: pointer; font-weight: 600;">
+        All Orders (<span id="count-all">0</span>)
+      </button>
+      <button class="queue-tab-btn" onclick="setQueueTab('pending', this)" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer; font-weight: 600;">
+        ⏳ Order List / Pending (<span id="count-pending">0</span>)
+      </button>
+      <button class="queue-tab-btn" onclick="setQueueTab('preparing', this)" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer; font-weight: 600;">
+        👨‍🍳 In Process / Making (<span id="count-preparing">0</span>)
+      </button>
+      <button class="queue-tab-btn" onclick="setQueueTab('ready', this)" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer; font-weight: 600;">
+        🛎️ Ready for Pickup (<span id="count-ready">0</span>)
+      </button>
+      <button class="queue-tab-btn" onclick="setQueueTab('completed', this)" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer; font-weight: 600;">
+        ✅ Completed (<span id="count-completed">0</span>)
+      </button>
+    </div>
+
+    <!-- Responsive Table Wrapper -->
+    <div class="table-responsive-wrapper" style="overflow-x: auto; background: white; border-radius: 8px; border: 1px solid #e2e8f0;">
+      <table class="data-table" style="width: 100%; border-collapse: collapse; min-width: 600px;">
+        <thead>
+          <tr style="background: #f1f5f9; text-align: left;">
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Order #</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Time</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Student</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Items</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Type</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Current Status</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="admin-queue-tbody">
+          <tr><td colspan="7" style="text-align: center; padding: 20px; color: #64748b;">No orders in queue.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Staff Tableware Oversight Panel (Super Admin & Cashier Only) -->
+  <section id="admin-loans-panel" class="admin-only" style="max-width: 1200px; margin: 2rem auto 3rem auto; padding: 0 1rem; display: none !important;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0;">🍽️ Active Tableware Loans</h3>
+      <button onclick="loadActiveLoans()" style="padding: 6px 12px; cursor: pointer; background: #0f172a; color: white; border: none; border-radius: 4px; font-weight: bold;">
+        🔄 Refresh
+      </button>
+    </div>
+
+    <div class="table-responsive-wrapper" style="overflow-x: auto; background: white; border-radius: 8px; border: 1px solid #cbd5e1;">
+      <table class="data-table" style="width: 100%; border-collapse: collapse; min-width: 500px;">
+        <thead>
+          <tr style="background: #f1f5f9; text-align: left;">
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Student Name</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">ID</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Items Borrowed</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Total</th>
+            <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="active-loans-tbody">
+          <tr><td colspan="5" style="text-align: center; padding: 15px; color: #64748b;">Loading tableware loans...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script src="./app.js"></script>
+</body>
+</html>
